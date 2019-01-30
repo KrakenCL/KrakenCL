@@ -23,24 +23,24 @@ internal enum BindTo {
     case unixDomainSocket(path: String)
 }
 
-public enum FrontendHosterError: Error {
+public enum HTTPServiceError: Error {
     case resourceBundlePathNotFound
     case resourceBundleNotFound(url: URL)
     //"Address was unable to bind. Please check that the socket was not closed or that the address family was understood."
     case unableToBindAddress
 }
 
-public class FrontendHoster {
+public class HTTPService {
     private static let ResourceBundleName = "Frontend"
     internal static let ServerPort = 8080
-    private var interactor: FrontendHosterInteractor!
+    private var interactor: HTTPServiceInteractor!
     private var bundlePath = "/dev/null"
     private var channel: Channel?
     
     private let httpQueue = DispatchQueue(label: "com.KrakenCL.httpservice")
     private let fileIO: NonBlockingFileIO
     private let group: MultiThreadedEventLoopGroup
-
+    
     public required init() {
         let threadPool = BlockingIOThreadPool(numberOfThreads: 6)
         threadPool.start()
@@ -49,7 +49,7 @@ public class FrontendHoster {
     }
     
     internal func startHTTPServer() throws {
-        let bindTarget = BindTo.ip(host: "::1", port: FrontendHoster.ServerPort)
+        let bindTarget = BindTo.ip(host: "::1", port: HTTPService.ServerPort)
         let allowHalfClosure = true
         
         let bootstrap = ServerBootstrap(group: group)
@@ -60,10 +60,10 @@ public class FrontendHoster {
             // Set the handlers that are applied to the accepted Channels
             .childChannelInitializer { channel in
                 channel.pipeline.configureHTTPServerPipeline(withErrorHandling: true).then {
-                    channel.pipeline.add(handler: FrontendHTTPHandler(fileIO: self.fileIO,
-                                                                      htdocsPath: self.bundlePath,
-                                                                      authoriser: self.interactor.authorizer,
-                                                                      apiInteractor: self.interactor.apiInteractor))
+                    channel.pipeline.add(handler: HTTPServiceHandler(fileIO: self.fileIO,
+                                                                     htdocsPath: self.bundlePath,
+                                                                     authoriser: self.interactor.authorizer,
+                                                                     apiInteractor: self.interactor.apiInteractor))
                 }
             }
             
@@ -81,28 +81,28 @@ public class FrontendHoster {
                 return try bootstrap.bind(unixDomainSocketPath: path).wait()
             }
             }()
-        guard let channel = channel else { throw FrontendHosterError.unableToBindAddress }
-        guard let localAddress = channel.localAddress else { throw FrontendHosterError.unableToBindAddress }
+        guard let channel = channel else { throw HTTPServiceError.unableToBindAddress }
+        guard let localAddress = channel.localAddress else { throw HTTPServiceError.unableToBindAddress }
         print("Server started and listening on \(localAddress), htdocs path \(self.bundlePath)")
         
         // This will never unblock as we don't close the ServerChannel
         try channel.closeFuture.wait()
         print("Server closed")
-
+        
     }
 }
 
-extension FrontendHoster : Serviceable {
+extension HTTPService : Serviceable {
     
     public func initialize() throws {
-
-        guard let resourceBundlePath = interactor?.resourceBundleURL else { throw FrontendHosterError.resourceBundlePathNotFound }
+        
+        guard let resourceBundlePath = interactor?.resourceBundleURL else { throw HTTPServiceError.resourceBundlePathNotFound }
         var isFolder: ObjCBool = false
         guard FileManager.default.fileExists(atPath: resourceBundlePath.absoluteString,
-                                             isDirectory: &isFolder) else { throw FrontendHosterError.resourceBundleNotFound(url: resourceBundlePath) }
+                                             isDirectory: &isFolder) else { throw HTTPServiceError.resourceBundleNotFound(url: resourceBundlePath) }
         
-        guard isFolder.boolValue else { throw FrontendHosterError.resourceBundleNotFound(url: resourceBundlePath) }
-        bundlePath = resourceBundlePath.appendingPathComponent(FrontendHoster.ResourceBundleName).absoluteString
+        guard isFolder.boolValue else { throw HTTPServiceError.resourceBundleNotFound(url: resourceBundlePath) }
+        bundlePath = resourceBundlePath.appendingPathComponent(HTTPService.ResourceBundleName).absoluteString
     }
     
     public func launch() throws {
@@ -115,9 +115,9 @@ extension FrontendHoster : Serviceable {
             }
         }
     }
-
+    
     public func register(interactor: ServiceInteractor) throws {
-        guard let interactor = interactor as? FrontendHosterInteractor else {
+        guard let interactor = interactor as? HTTPServiceInteractor else {
             throw ServiceError.incompatibleServiceInteractor
         }
         self.interactor = interactor
@@ -128,7 +128,7 @@ extension FrontendHoster : Serviceable {
     }
 }
 
-public protocol FrontendHosterInteractor: ServiceInteractor {
+public protocol HTTPServiceInteractor: ServiceInteractor {
     var apiInteractor: APIInteractor { get }
     var authorizer: Authorisable { get }
 }

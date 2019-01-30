@@ -22,7 +22,7 @@ extension Core: APIInteractor {
         return User(identifier: UUID().uuidString)
     }
     
-    public func process(requestHead: APIRequestHead, requestBody: String) -> APIResponder {
+    public func process(requestHead: APIRequestHead, requestBody: Data?) -> APIResponder {
         
         guard let client = self.personalize(by: requestHead.headers),
             isAllowed(method: requestHead.method, path: requestHead.uri, client: client) else {

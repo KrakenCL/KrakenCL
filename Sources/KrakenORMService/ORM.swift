@@ -14,11 +14,8 @@
  */
 
 import Foundation
-import KituraContracts
 import KrakenContracts
-import SwiftKuerySQLite
-import SwiftKueryORM
-import SwiftKuery
+import Dispatch
 
 public enum ORMServiceError: Error {
     case databasePathNotFound
@@ -29,70 +26,68 @@ public enum ORMServiceError: Error {
 
 public class ORMService {
     static let databaseFileName = "KrakenCL.db"
-    static let databaseInitialCapacity = 10
-    static let databaseMaxCapacity = 30
     var interactor: ORMServiceInteractor!
-    var pool: SwiftKuery.ConnectionPool?
-    
-    public required init() {
-        
-    }
-    
-    internal func initializeTabels(database: Database? = nil) throws {
-        do {
-            try MLModel.createTableSync(using: database)
-        } catch {
-            //table already exists.
-            guard let requestError = error as? KituraContracts.RequestError, requestError.rawValue == 706 else  {
-                throw error
-            }
-        }
-    }
+    let dbQueue = DispatchQueue(label: "com.KrakenCL.ORMQueue")
+    public required init() { }
 }
 
 extension ORMService: Serviceable {
     public func initialize() throws {
         let dbPath = interactor.configsFolderURL.appendingPathComponent(ORMService.databaseFileName, isDirectory: false)
-        pool = SQLiteConnection.createPool(filename: dbPath.absoluteString,
-                                           poolOptions: ConnectionPoolOptions(initialCapacity: ORMService.databaseInitialCapacity,
-                                                                              maxCapacity: ORMService.databaseMaxCapacity))
+        dbQueue.sync(flags: .barrier) {
+            
+            
+        }
     }
     
     public func launch() throws {
-        let semaphore = DispatchSemaphore(value: 1)
-        var error: Error? = nil
-        guard let pool = pool else { throw ORMServiceError.poolNotFound }
-        pool.getConnection() { [weak self ] connection, connectionError in
-            guard let wSelf = self else { return }
-            defer {
-                semaphore.signal()
-            }
-            if let connectionError = connectionError {
-                error = connectionError
-                return
-            }
-            
-            guard let _ = connection else {
-                error = ORMServiceError.connectionNotFound
-                return
-            }
-        }
-        
-        
-        semaphore.wait()
-        
-        if let error = error {
-            throw error
-        }
-        
-        Database.default = Database(pool)
-        try initializeTabels()
-
+//        let model = MLModel(identifier: Identifier.new,
+//                            name: "ResNet",
+//                            description: "New ResNet model",
+//                            mainFile: "model.py",
+//                            language: .python2,
+//                            dependensies: .pip(packages: ["numpy", "pandas"]),
+//                            tensorFlowOptions: TensorFlowOptions(accelerator: .none, tensorBoardOptions: TensorBoardOptions(logDir: "/tmp/logdir")),
+//                            dockerOptions: nil,
+//                            modelSource: ModelSource.sourcePoint(anchor: SourcePoint(identifier: Identifier.new, name: "ArchivedFolder", path: "/tmp/path")))
+//
+//        let data = try? JSONEncoder().encode(model)
+//        if let data = data {
+//            print(String(data: data, encoding: .utf8))
+//        }
+//        {
+//            "tensorFlowOptions": {
+//                "accelerator": "none",
+//                "tensorBoardOptions": {
+//                    "logDir": "\\/tmp\\/logdir"
+//                }
+//            },
+//            "dependensies": {
+//                "base": "casePIP",
+//                "packagesParams": {
+//                    "packages": [
+//                    "numpy",
+//                    "pandas"
+//                    ]
+//                }
+//            },
+//            "language": "python2",
+//            "mainFile": "model.py",
+//            "description": "New ResNet model",
+//            "identifier": "4F8AA078-4A91-43B2-A111-76B3BFE70132",
+//            "name": "ResNet",
+//            "modelSource": {
+//                "base": "caseSourcePoint",
+//                "anchor": {
+//                    "name": "ArchivedFolder",
+//                    "path": "\\/tmp\\/path",
+//                    "identifier": "D006D35A-C050-4D7C-8DA2-9AC3BB6A5804"
+//                }
+//            }
+//        }
     }
     
-    public func shoutdown() throws {
-        
-    }
+    public func shoutdown() throws { }
     
     public func register(interactor: ServiceInteractor) throws {
         guard let interactor = interactor as? ORMServiceInteractor else {
@@ -102,5 +97,4 @@ extension ORMService: Serviceable {
     }
 }
 
-public protocol ORMServiceInteractor: ServiceInteractor {
-}
+public protocol ORMServiceInteractor: ServiceInteractor { }

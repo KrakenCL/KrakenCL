@@ -48,7 +48,7 @@ class Core {
             do {
                 try FileManager.checkAndCreateFolder(wSelf.labsFolderURL)
                 try FileManager.checkAndCreateFolder(wSelf.configsFolderURL)
-                try wSelf.register(service: FrontendHoster.self)
+                try wSelf.register(service: HTTPService.self)
                 try wSelf.register(service: ORMService.self)
             } catch {
                 callback(.negative(error: error))
@@ -58,9 +58,12 @@ class Core {
     }
     
     func process(message: APIResponder, from apiClient: APIClient) {
-        print(message)
+        if let modelIntractableResponder = message as? ModelInteractableResponder {
+            self.processModelResponder(modelResponder: modelIntractableResponder, from: apiClient)
+        } else {
+            
+        }
     }
-    
 }
 
 extension Core: ServiceContainable {
@@ -85,7 +88,7 @@ extension Core: ServiceInteractor {
     }
 }
 
-extension Core: FrontendHosterInteractor {
+extension Core: HTTPServiceInteractor {
     var apiInteractor: APIInteractor { return self }
     var authorizer: Authorisable { return self }
 }

@@ -12,6 +12,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
  */
+import Foundation
 
 public typealias APIHeaders = [(String, String)]
 public struct APIRequestHead {
@@ -57,7 +58,6 @@ public struct APIResponseHead {
     }
 }
 
-
 public typealias Identifier = String
 
 public protocol APIClient {
@@ -70,16 +70,18 @@ public protocol Personalizable {
 
 public protocol APIResponder {
     var requestHead: APIRequestHead { get }
-    var requestBody: String { get }
+    var requestBody: Data? { get }
 
     var responseHead: APIResponseHead { get }
-    var responseBody: String { get }
+    var responseBody: Data? { get }
     var defaultHeaders: APIHeaders { get }
-    init(requestHead: APIRequestHead, requestBody: String)
+    init(requestHead: APIRequestHead, requestBody: Data?)
+    
+    func badRequest()
 }
 
 public protocol APIInteractor: Personalizable {
-    func process(requestHead: APIRequestHead, requestBody: String) -> APIResponder
+    func process(requestHead: APIRequestHead, requestBody: Data?) -> APIResponder
 }
 
 public protocol Authorisable {

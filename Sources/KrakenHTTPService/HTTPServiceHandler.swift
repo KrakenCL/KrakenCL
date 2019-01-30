@@ -50,42 +50,6 @@ extension HTTPResponseStatus {
     }
 }
 
-//
-//extension Version {
-//    init(_ httpVersion: HTTPVersion) {
-//        self = Version(major: httpVersion.major, minor: httpVersion.minor)
-//    }
-//}
-//
-//extension RequestHead {
-//    init(_ httpRequestHead: HTTPRequestHead) {
-//        self = RequestHead(method: KrakenContracts.Method(httpMethod: httpRequestHead.method) ?? .GET,
-//                           version: Version(httpRequestHead.version),
-//                           headers: Headers(httpRequestHead.headers),
-//                           uri: httpRequestHead.uri)
-//    }
-//}
-//
-//extension ResponseHead {
-//    var httpRequestHead: HTTPResponseHead {
-//        
-//        let httpVersion = HTTPVersion(major: version.major, minor: version.minor)
-//        var statusCode: HTTPResponseStatus = .ok
-//        switch status {
-//        case .notFound:
-//            statusCode = .notFound
-//        case .error:
-//            statusCode = .internalServerError
-//        case .forbidden:
-//            statusCode = .forbidden
-//        case .positive:
-//            statusCode = .ok
-//        case .badRequest:
-//            statusCode = .badRequest
-//        }
-//        return HTTPResponseHead(version: httpVersion, status: statusCode)
-//    }
-//}
 
 extension String {
     public func chopPrefix(_ prefix: String) -> String? {
@@ -127,7 +91,7 @@ func httpResponseHead(request: HTTPRequestHead, status: HTTPResponseStatus, head
     return head
 }
 
-internal final class FrontendHTTPHandler: ChannelInboundHandler {
+internal final class HTTPServiceHandler: ChannelInboundHandler {
     private enum FileIOMethod {
         case sendfile
         case nonblockingFileIO
@@ -158,6 +122,7 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
     }
     
     private var buffer: ByteBuffer! = nil
+    private var requestBody: Data?
     private var keepAlive = false
     private var state = State.idle
     private let htdocsPath: String
@@ -165,7 +130,6 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
     private var handler: ((ChannelHandlerContext, HTTPServerRequestPart) -> Void)?
     private var handlerFuture: EventLoopFuture<Void>?
     private let fileIO: NonBlockingFileIO
-    private let defaultResponse = "Hello World\r\n"
     private let authoriser: Authorisable
     private let apiInteractor: APIInteractor
     private var savedRequestHead: HTTPRequestHead?
@@ -177,15 +141,18 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
         self.apiInteractor = apiInteractor
     }
     
+    //MARK: - API Call handler
     func handleAPICall(ctx: ChannelHandlerContext, request: HTTPServerRequestPart) {
         switch request {
         case .head(let request):
             self.keepAlive = request.isKeepAlive
             self.state.requestReceived()
             self.savedRequestHead = request
-        case .body(buffer: let buf):
-            print(#function, buf.debugDescription)
-            
+        case .body(buffer: var buf):
+            let count = buf.readableBytes
+            if let bytes = buf.readBytes(length: count) {
+                requestBody = Data(bytes: bytes, count: count)
+            }
             break
         case .end:
             self.state.requestComplete()
@@ -197,14 +164,15 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
             let headers = requestHead.headers.compactMap { ($0.name, $0.value) }
             let apiRequestHead = APIRequestHead(method: method, headers: headers, uri: requestHead.uri)
             
-            let responder = self.apiInteractor.process(requestHead: apiRequestHead, requestBody: "POST IS EMPTY")
+            let responder = self.apiInteractor.process(requestHead: apiRequestHead, requestBody: self.requestBody)
             
             let head = httpResponseHead(request: requestHead,
                                         status: HTTPResponseStatus(responder.responseHead.status),
-                                        headers:HTTPHeaders(responder.responseHead.headers))
+                                        headers: HTTPHeaders(responder.responseHead.headers))
             self.buffer.clear()
-            self.buffer.write(string: responder.responseBody)
-            
+            if let body = responder.responseBody {
+                self.buffer.write(bytes: body)
+            }
             
             ctx.write(self.wrapOutboundOut(.head(head)), promise: nil)
             ctx.write(self.wrapOutboundOut(.body(.byteBuffer(self.buffer))), promise: nil)
@@ -212,6 +180,7 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
         }
     }
     
+    //MARK: - Quick computed response
     func handleJustWrite(ctx: ChannelHandlerContext, request: HTTPServerRequestPart, statusCode: HTTPResponseStatus = .ok, string: String, trailer: (String, String)? = nil, delay: TimeAmount = .nanoseconds(0), responseHeaders: HTTPHeaders = HTTPHeaders()) {
         switch request {
         case .head(let request):
@@ -237,15 +206,7 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
         }
     }
     
-    func dynamicHandler(request reqHead: HTTPRequestHead) -> ((ChannelHandlerContext, HTTPServerRequestPart) -> Void)? {
-        switch reqHead.uri {
-        case "/api/pid":
-            return { ctx, req in self.handleJustWrite(ctx: ctx, request: req, string: "\(getpid())\r\n") }
-        default:
-            return self.handleAPICall
-        }
-    }
-    
+    //MARK: - File handler
     private func handleFile(ctx: ChannelHandlerContext, request: HTTPServerRequestPart, ioMethod: FileIOMethod, path: String) {
         self.buffer.clear()
         
@@ -396,7 +357,7 @@ internal final class FrontendHTTPHandler: ChannelInboundHandler {
             }
             
             if request.uri.unicodeScalars.starts(with: "/api".unicodeScalars) {
-                self.handler = self.dynamicHandler(request: request)
+                self.handler = self.handleAPICall
                 self.handler!(ctx, reqPart)
                 return
             }  else if let path = request.uri.chopPrefix("/static/") {
