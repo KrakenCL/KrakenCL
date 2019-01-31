@@ -16,7 +16,7 @@
 import Foundation
 import KrakenContracts
 
-public protocol ModelObjectRepresentable: Codable {
+public protocol ModelObjectRepresentable: Codable, Identifiable {
     
 }
 extension Identifier {
@@ -25,8 +25,14 @@ extension Identifier {
     }
 }
 
-public protocol Identifiable  {
-    var identifier: Identifier { get }
+public protocol Identifiable {
+    var identifier: Identifier { get set }
+    mutating func identify()
+}
+extension Identifiable {
+    public mutating func identify() {
+        self.identifier = Identifier.new
+    }
 }
 
 public protocol Descriable {
@@ -109,7 +115,8 @@ public struct TensorFlowOptions: Codable {
 }
 
 public struct SourcePoint: Identifiable, Codable {
-    public let identifier: Identifier
+    
+    public var identifier: Identifier
     public let name: String
     public let path: String
 }
@@ -163,10 +170,9 @@ public enum ModelSource: Codable {
     }
 }
 
-public struct SomeModel: ModelObjectRepresentable { }
-
-public struct MLModel: Identifiable, Descriable, ModelObjectRepresentable {
-    public let identifier: Identifier
+public struct MLModel: Descriable, ModelObjectRepresentable {
+    
+    public var identifier: Identifier
     public var name: String
     public var description: String
 

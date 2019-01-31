@@ -58,7 +58,7 @@ class Core {
     }
     
     func process(message: APIResponder, from apiClient: APIClient) {
-        if let modelIntractableResponder = message as? ModelInteractableResponder {
+        if let modelIntractableResponder = message as? ModelInteractableResponder<MLModel> {
             self.processModelResponder(modelResponder: modelIntractableResponder, from: apiClient)
         } else {
             

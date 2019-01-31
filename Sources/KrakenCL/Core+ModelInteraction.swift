@@ -15,11 +15,11 @@
 
 import Foundation
 import KrakenContracts
-
+import KrakenORMService
 
 extension Core: ModelInteraction {
     
-    func processModelResponder(modelResponder: ModelInteractableResponder, from apiClient: APIClient) {
+    func processModelResponder<M: ModelObjectRepresentable>(modelResponder: ModelInteractableResponder<M>, from apiClient: APIClient) {
         switch modelResponder.requestHead.method {
         case .GET:
             break
@@ -32,18 +32,22 @@ extension Core: ModelInteraction {
         }
     }
     
-    func updateModel(modelResponder: ModelInteractableResponder, from apiClient: APIClient) {
+    func updateModel<M: ModelObjectRepresentable>(modelResponder: ModelInteractableResponder<M>, from apiClient: APIClient) {
 
-        guard let model = try? modelResponder.readModel() else {
+        guard var model = try? modelResponder.readModel() else {
             return
         }
-        
-        print(model)
-        
-        
+        if model.identifier.isEmpty {
+            model.identify()
+            modelResponder.model = model
+            modelResponder.writeModel()
+        } else {
+            modelResponder.writeModel()
+        }
+
     }
     
-    func readModel(modelResponder: ModelInteractableResponder, from apiClient: APIClient) {
+    func readModel<M: ModelObjectRepresentable>(modelResponder: ModelInteractableResponder<M>, from apiClient: APIClient) {
     
     }
 }

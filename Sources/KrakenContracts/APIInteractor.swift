@@ -28,11 +28,13 @@ public struct APIRequestHead {
 }
 
 public enum APIResponseStatus: String {
+    
     case notFound
     case forbidden
     case error
     case positive
     case badRequest
+    
 }
 
 public enum APIMethod: String {
@@ -72,12 +74,13 @@ public protocol APIResponder {
     var requestHead: APIRequestHead { get }
     var requestBody: Data? { get }
 
-    var responseHead: APIResponseHead { get }
-    var responseBody: Data? { get }
+    var responseHead: APIResponseHead { get set }
+    var responseBody: Data? { get set }
     var defaultHeaders: APIHeaders { get }
     init(requestHead: APIRequestHead, requestBody: Data?)
     
-    func badRequest()
+    func response(status: APIResponseStatus)
+    
 }
 
 public protocol APIInteractor: Personalizable {

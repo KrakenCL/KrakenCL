@@ -52,26 +52,11 @@ extension APIResponder {
 
 public enum APIResponderError: Error {
     case bodyRequired
+    case modelRequired
 }
-
-public protocol ModelInteractable: APIResponder {
-    associatedtype ModelClass: ModelObjectRepresentable
-    func readModel() throws -> ModelClass
-}
-
-extension ModelInteractable {
-    func readModel() throws -> ModelClass {
-        guard let body = self.requestBody else {
-            throw APIResponderError.bodyRequired
-        }
-        badRequest()
-        let model = try JSONDecoder().decode(ModelClass.self, from: body)
-        return model
-    }
-}
-
 
 class BaseResponder: APIResponder {
+    
     public var defaultHeaders: APIHeaders {
         var headers = APIHeaders()
         headers.append(("Content-Length", "\(self.responseBody?.count ?? 0)"))
@@ -87,6 +72,7 @@ class BaseResponder: APIResponder {
     }
     
     public var rawResponseHead: APIResponseHead?
+    public var rawResponseBody: Data?
     
     public var responseHead: APIResponseHead {
         get {
@@ -101,40 +87,55 @@ class BaseResponder: APIResponder {
     }
     
     public var responseBody: Data? {
-        return "Bad Request".data(using: .utf8)
+        get {
+            return rawResponseBody
+        }
+        set {
+            rawResponseBody = newValue
+        }
     }
     
-    func badRequest() {
-        responseHead = APIResponseHead(status: .badRequest, headers: defaultHeaders)
+    func response(status: APIResponseStatus) {
+        responseHead = APIResponseHead(status: status, headers: defaultHeaders)
+    }
+    
+}
+
+class ModelInteractableResponder<M:ModelObjectRepresentable>: BaseResponder {
+    var model: M?
+    func readModel() throws -> M {
+        guard let body = self.requestBody else {
+            throw APIResponderError.bodyRequired
+        }
+        response(status: .badRequest)
+        let model = try JSONDecoder().decode(M.self, from: body)
+        self.model = model
+        return model
+    }
+    
+    func writeModel() {
+        guard let model = model else {
+            response(status: .error)
+            return
+        }
+        do {
+            responseBody = try JSONEncoder().encode(model)
+            response(status: .positive)
+        } catch {
+            response(status: .error)
+        }
     }
 }
 
+class MLModelResponder: ModelInteractableResponder<MLModel> { }
 
-class ModelInteractableResponder: BaseResponder, ModelInteractable {
-    typealias ModelClass = SomeModel
-    
-}
+class ConfigurationResponder: BaseResponder { }
 
+class  StorepointResponder: BaseResponder { }
 
-class MLModelResponder: ModelInteractableResponder {
-    typealias ModelClass = MLModel
-}
+class  TriggerResponder: BaseResponder { }
 
-class ConfigurationResponder: BaseResponder {
-    
-}
-
-class  StorepointResponder: BaseResponder {
-    
-}
-
-class  TriggerResponder: BaseResponder {
-    
-}
-
-class  RPCResponder: BaseResponder {
-    
-}
+class  RPCResponder: BaseResponder { }
 
 class ForbiddenResponder: BaseResponder {
     
@@ -147,8 +148,9 @@ class ForbiddenResponder: BaseResponder {
         }
     }
     
-    public override var responseBody: Data? {
-        return "Forbidden".data(using: .utf8)
+    override var rawResponseBody: Data? {
+        get { return "Forbidden".data(using: .utf8) }
+        set { }
     }
 }
 
@@ -162,9 +164,9 @@ class NotFoundResponder: BaseResponder {
             rawResponseHead = APIResponseHead(status: .notFound, headers: defaultHeaders)
         }
     }
-    
-    public override var responseBody: Data? {
-        return "NotFound".data(using: .utf8)
+    override var rawResponseBody: Data? {
+        get { return "NotFound".data(using: .utf8) }
+        set { }
     }
 }
 
@@ -178,7 +180,8 @@ class InfoResponder: BaseResponder {
         }
     }
     
-    public override var responseBody: Data? {
-        return "Info ok".data(using: .utf8)
+    override var rawResponseBody: Data? {
+        get { return "Info ok".data(using: .utf8) }
+        set { }
     }
 }
