@@ -46,9 +46,7 @@ extension APIMessage {
     }
 }
 
-extension APIResponder {
-    
-}
+extension APIResponder { }
 
 public enum APIResponderError: Error {
     case bodyRequired
@@ -101,41 +99,9 @@ class BaseResponder: APIResponder {
     
 }
 
-class ModelInteractableResponder<M:ModelObjectRepresentable>: BaseResponder {
-    var model: M?
-    func readModel() throws -> M {
-        guard let body = self.requestBody else {
-            throw APIResponderError.bodyRequired
-        }
-        response(status: .badRequest)
-        let model = try JSONDecoder().decode(M.self, from: body)
-        self.model = model
-        return model
-    }
-    
-    func writeModel() {
-        guard let model = model else {
-            response(status: .error)
-            return
-        }
-        do {
-            responseBody = try JSONEncoder().encode(model)
-            response(status: .positive)
-        } catch {
-            response(status: .error)
-        }
-    }
+class ModelInteractableResponder: BaseResponder {
+    var model: ModelObjectRepresentable?
 }
-
-class MLModelResponder: ModelInteractableResponder<MLModel> { }
-
-class ConfigurationResponder: BaseResponder { }
-
-class  StorepointResponder: BaseResponder { }
-
-class  TriggerResponder: BaseResponder { }
-
-class  RPCResponder: BaseResponder { }
 
 class ForbiddenResponder: BaseResponder {
     
@@ -185,3 +151,13 @@ class InfoResponder: BaseResponder {
         set { }
     }
 }
+
+class MLModelResponder: ModelInteractableResponder { }
+
+class ConfigurationResponder: BaseResponder { }
+
+class  StorepointResponder: BaseResponder { }
+
+class  TriggerResponder: BaseResponder { }
+
+class  RPCResponder: BaseResponder { }

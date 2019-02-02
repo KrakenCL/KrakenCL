@@ -19,35 +19,4 @@ import KrakenORMService
 
 extension Core: ModelInteraction {
     
-    func processModelResponder<M: ModelObjectRepresentable>(modelResponder: ModelInteractableResponder<M>, from apiClient: APIClient) {
-        switch modelResponder.requestHead.method {
-        case .GET:
-            break
-        case .POST:
-            updateModel(modelResponder: modelResponder, from: apiClient)
-            break
-        case .DELETE:
-            break
-        
-        }
-    }
-    
-    func updateModel<M: ModelObjectRepresentable>(modelResponder: ModelInteractableResponder<M>, from apiClient: APIClient) {
-
-        guard var model = try? modelResponder.readModel() else {
-            return
-        }
-        if model.identifier.isEmpty {
-            model.identify()
-            modelResponder.model = model
-            modelResponder.writeModel()
-        } else {
-            modelResponder.writeModel()
-        }
-
-    }
-    
-    func readModel<M: ModelObjectRepresentable>(modelResponder: ModelInteractableResponder<M>, from apiClient: APIClient) {
-    
-    }
 }
