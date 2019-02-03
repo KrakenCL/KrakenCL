@@ -27,7 +27,7 @@ public struct APIRequestHead {
     }
 }
 
-public enum APIResponseStatus: String {
+public enum APIResponseStatus: Int, CustomStringConvertible {
     
     case notFound
     case forbidden
@@ -35,6 +35,22 @@ public enum APIResponseStatus: String {
     case positive
     case badRequest
     
+    public var description: String {
+        switch self {
+        case .notFound:
+            return "Page not found."
+        case .forbidden:
+            return "Access denided."
+        case .error:
+            return "Internal server error."
+        case .positive:
+            return "Ok!."
+        case .badRequest:
+            return "Bad request format or values."
+            
+        }
+    }
+
 }
 
 public enum APIMethod: String {
@@ -76,11 +92,7 @@ public protocol APIResponder {
 
     var responseHead: APIResponseHead { get set }
     var responseBody: Data? { get set }
-    var defaultHeaders: APIHeaders { get }
-    init(requestHead: APIRequestHead, requestBody: Data?)
-    
-    func response(status: APIResponseStatus)
-    
+    var defaultHeaders: APIHeaders { get }        
 }
 
 public protocol APIInteractor: Personalizable {

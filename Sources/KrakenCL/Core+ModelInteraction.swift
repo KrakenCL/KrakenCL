@@ -17,6 +17,21 @@ import Foundation
 import KrakenContracts
 import KrakenORMService
 
+protocol RawModelObjectRepresentable: Codable { }
+struct RawMLModel : RawModelObjectRepresentable {
+    public var identifier: Identifier
+    public var name: String
+    public var description: String
+
+}
+
+
 extension Core: ModelInteraction {
+    func update(model: RawModelObjectRepresentable, for client: APIClient, callback: (Result<RawModelObjectRepresentable>) -> Void) {
+        
+    }
+    
+    
+    
     
 }

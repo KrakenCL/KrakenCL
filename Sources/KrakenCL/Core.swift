@@ -56,10 +56,6 @@ class Core {
             callback(.positive)
         }
     }
-    
-    func process(message: APIResponder, from apiClient: APIClient) {
-
-    }
 }
 
 extension Core: ServiceContainable {

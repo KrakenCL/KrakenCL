@@ -18,30 +18,69 @@ import KrakenContracts
 import KrakenHTTPService
 import KrakenORMService
 
+public struct ErrorRepresentation: Codable {
+    var code: Int?
+    var message: String?
+}
+
+public enum ResponderError: Int, CustomStringConvertible, Error {
+    case timeout
+    case encodeModel
+    case decodeModel
+    case ormInteraction
+    
+    public var description: String {
+        switch self {
+        case .timeout:
+            return "Server can't process request for allocated period of time."
+        case .encodeModel:
+            return "Can't encode model."
+        case .decodeModel:
+            return "Can't decode model."
+        case .ormInteraction:
+            return "Can't save or restore model from ORM,"
+
+        }
+    }
+    
+    var representation: ErrorRepresentation {
+        return ErrorRepresentation(code: self.rawValue, message: self.description)
+    }
+}
+
+public struct EmptyValue: Codable {}
+
+public struct ErrorOrValue<V: Codable>: Codable {
+    var error: ErrorRepresentation?
+    var value: V?
+    
+    init(errorCode code: Int, errorMessage message: String) {
+        self.error = ErrorRepresentation(code: code, message: message)
+    }
+    
+    init(value: V) {
+        self.value = value
+    }
+    
+    init(error: ErrorRepresentation) {
+        self.value = nil
+        self.error = error
+    }
+    
+    func serialyze() throws -> Data {
+        return try JSONEncoder().encode(self)
+    }
+}
+
 public enum APIMessage: String, CaseIterable {
-    case info
-    case mlmodel
-    case configuration
-    case storepoint
-    case trigger
-    case rpc
+    case orm
 }
 
 extension APIMessage {
-    var responsableClass: APIResponder.Type {
+    var responsableClass: BaseResponder.Type {
         switch self {
-        case .mlmodel:
-            return MLModelResponder.self
-        case .info:
-            return InfoResponder.self
-        case .configuration:
-            return ConfigurationResponder.self
-        case .storepoint:
-            return StorepointResponder.self
-        case .trigger:
-            return TriggerResponder.self
-        case .rpc:
-            return RPCResponder.self
+        case .orm:
+            return ORMResponder.self
         }
     }
 }
@@ -53,111 +92,188 @@ public enum APIResponderError: Error {
     case modelRequired
 }
 
-class BaseResponder: APIResponder {
+protocol BaseResponder: class, APIResponder {
+    var defaultHeaders: APIHeaders { get }
+    var requestHead: APIRequestHead { get set }
+    var requestBody: Data? { get set }
+    var authInteraction: Authorisable { get set }
+    var personInteraction: Personalizable { get set }
+    var modelInteraction: ModelInteraction { get  set }
+    func process()
+    init(requestHead: APIRequestHead, requestBody: Data?, authInteraction: Authorisable, personInteraction: Personalizable, modelInteraction: ModelInteraction)
     
+}
+
+extension BaseResponder {
     public var defaultHeaders: APIHeaders {
         var headers = APIHeaders()
         headers.append(("Content-Length", "\(self.responseBody?.count ?? 0)"))
         return headers
     }
-    
+    public func process() {
+        
+    }
+}
+
+class ORMResponder: BaseResponder {
+    static let timeout: Double = 60
     var requestHead: APIRequestHead
     var requestBody: Data?
+    var responseHead: APIResponseHead
+    var responseBody: Data?
+    var queue = DispatchQueue(label: "com.krakencl.ResponderProcessQueue", qos: DispatchQoS.default, attributes: DispatchQueue.Attributes.concurrent)
+    var semaphore = DispatchSemaphore(value: 1)
+    
+    var authInteraction: Authorisable
+    var personInteraction: Personalizable
+    var modelInteraction: ModelInteraction
+    var rawModelType: RawModelObjectRepresentable.Type!
+    
+    
+    enum Model: String {
+        case mlModel
+        
+        var rawModelType: RawModelObjectRepresentable.Type {
+            switch self {
+            case .mlModel:
+                return RawMLModel.self
+            }
+        }
+    }
 
-    required init(requestHead: APIRequestHead, requestBody: Data?) {
+    
+    required init(requestHead: APIRequestHead, requestBody: Data?, authInteraction: Authorisable, personInteraction: Personalizable, modelInteraction: ModelInteraction) {
         self.requestHead = requestHead
         self.requestBody = requestBody
+        self.authInteraction = authInteraction
+        self.personInteraction = personInteraction
+        self.modelInteraction = modelInteraction
+        self.responseHead = APIResponseHead(status: .error, headers: [])
     }
     
-    public var rawResponseHead: APIResponseHead?
-    public var rawResponseBody: Data?
+    func evaluate() {
+        guard let client = personInteraction.personalize(by: requestHead.headers) else {
+            terminate(error: .timeout)
+            return
+        }
+        
+        guard authInteraction.isAllowed(method: requestHead.method, path: requestHead.uri, client: client) else {
+            terminate(status: .forbidden)
+            return
+        }
+        // Do actions
+        action(for: client)
+    }
     
-    public var responseHead: APIResponseHead {
-        get {
-            if let head = rawResponseHead {
-                return head
+    func action(for client: APIClient) {
+        switch requestHead.method {
+        case .GET:
+            return
+            
+        case .POST:
+            if modelType() == RawMLModel.self {
+                guard let model: RawMLModel = readModelObject() else { return }
+                update(model: model, for: client)
             }
-            return APIResponseHead(status: .error, headers: defaultHeaders)
-        }
-        set {
-            rawResponseHead = newValue
-        }
-    }
-    
-    public var responseBody: Data? {
-        get {
-            return rawResponseBody
-        }
-        set {
-            rawResponseBody = newValue
+            return
+            
+        case .DELETE:
+            return
         }
     }
     
-    func response(status: APIResponseStatus) {
-        responseHead = APIResponseHead(status: status, headers: defaultHeaders)
+    func update<M: RawModelObjectRepresentable>(model: M, for client: APIClient) {
+        modelInteraction.update(model: model, for: client) { (result) in
+            result.onNegative({ (error: Error) in
+                if let modelError = error as? ModelInteractionError {
+                    if modelError == .accessDenied {
+                        self.terminate(status: .forbidden)
+                    }
+                    terminate(error: .ormInteraction)
+                }
+            })
+            
+            result.onPositive({ (model) in
+                guard let rawModel = model as? M else {
+                    terminate(error: .encodeModel)
+                    return
+                }
+                self.write(model: rawModel)
+                self.finish()
+            })
+        }
     }
     
+    func readModelObject<M: RawModelObjectRepresentable>() -> M? {
+        guard let data = requestBody else {
+            terminate(status: .badRequest)
+            return nil
+        }
+        
+        do {
+          return try JSONDecoder().decode(M.self, from: data)
+        } catch {
+            terminate(error: .decodeModel)
+        }
+        return nil
+    }
+    
+    func write<M: RawModelObjectRepresentable>(model: M) {
+        do {
+            responseBody = try ErrorOrValue(value: model).serialyze()
+            responseHead.status = .positive
+        } catch {
+            terminate(error: .encodeModel)
+        }
+    }
+    
+    func finish() {
+        semaphore.signal()
+    }
+    
+    func modelType() -> RawModelObjectRepresentable.Type? {
+        guard let call = requestHead.uri.chopPrefix("/api") else  { return nil }
+        guard let type = call.split(separator: "/").first, type == "orm" else { return nil }
+        guard let model = call.split(separator: "/").last else { return nil }
+        return Model(rawValue: String(model))?.rawModelType
+    }
+    
+    func terminate(error: ResponderError) {
+        self.responseHead.status = .error
+        self.responseBody = try? ErrorOrValue<EmptyValue>(error: error.representation).serialyze()
+        semaphore.signal()
+    }
+
+    func terminate(status: APIResponseStatus) {
+        self.responseHead.status = status
+        if status == .positive {
+            let errorOrValue = ErrorOrValue<EmptyValue>(value: EmptyValue())
+            self.responseBody = try? errorOrValue.serialyze()
+
+        } else {
+            let errorOrValue = ErrorOrValue<EmptyValue>(errorCode: status.rawValue, errorMessage: status.description)
+            self.responseBody = try? errorOrValue.serialyze()
+        }
+        semaphore.signal()
+    }
+    
+    public func process() {
+    
+        guard let modelType = modelType() else {
+            terminate(status: .badRequest)
+            return
+        }
+        
+        rawModelType = modelType
+        
+        // Launch processing
+        queue.async {
+            self.evaluate()
+        }
+        
+        let result = semaphore.wait(timeout: DispatchTime.now() + ORMResponder.timeout)
+        if result == .timedOut {
+            terminate(error: .timeout)
+        }
+    }
 }
-
-class ModelInteractableResponder: BaseResponder {
-    var model: ModelObjectRepresentable?
-}
-
-class ForbiddenResponder: BaseResponder {
-    
-    public override var responseHead: APIResponseHead {
-        get {
-            return APIResponseHead(status: .forbidden, headers: defaultHeaders)
-        }
-        set {
-            rawResponseHead = APIResponseHead(status: .forbidden, headers: defaultHeaders)
-        }
-    }
-    
-    override var rawResponseBody: Data? {
-        get { return "Forbidden".data(using: .utf8) }
-        set { }
-    }
-}
-
-class NotFoundResponder: BaseResponder {
-    
-    public override var responseHead: APIResponseHead {
-        get {
-            return APIResponseHead(status: .notFound, headers: defaultHeaders)
-        }
-        set {
-            rawResponseHead = APIResponseHead(status: .notFound, headers: defaultHeaders)
-        }
-    }
-    override var rawResponseBody: Data? {
-        get { return "NotFound".data(using: .utf8) }
-        set { }
-    }
-}
-
-class InfoResponder: BaseResponder {
-    public override var responseHead: APIResponseHead {
-        get {
-            return APIResponseHead(status: .positive, headers: defaultHeaders)
-        }
-        set {
-            rawResponseHead = APIResponseHead(status: .positive, headers: defaultHeaders)
-        }
-    }
-    
-    override var rawResponseBody: Data? {
-        get { return "Info ok".data(using: .utf8) }
-        set { }
-    }
-}
-
-class MLModelResponder: ModelInteractableResponder { }
-
-class ConfigurationResponder: BaseResponder { }
-
-class  StorepointResponder: BaseResponder { }
-
-class  TriggerResponder: BaseResponder { }
-
-class  RPCResponder: BaseResponder { }

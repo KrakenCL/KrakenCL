@@ -25,3 +25,10 @@ extension Core: Authorisable {
         return true
     }
 }
+
+extension Core: Personalizable {
+    func personalize(by header: APIHeaders) -> APIClient? {
+        // Any user
+        return User(identifier: UUID().uuidString)
+    }
+}

@@ -14,5 +14,12 @@
  */
 
 import Foundation
+import KrakenContracts
 
-protocol ModelInteraction {}
+enum ModelInteractionError: Error {
+    case accessDenied
+}
+protocol ModelInteraction {
+    func update(model: RawModelObjectRepresentable, for client: APIClient, callback: ResultCompletion<RawModelObjectRepresentable>)
+    
+}

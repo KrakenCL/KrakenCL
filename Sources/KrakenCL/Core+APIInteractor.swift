@@ -16,27 +16,31 @@
 import Foundation
 import KrakenContracts
 
+
+
 extension Core: APIInteractor {
-    func personalize(by header: APIHeaders) -> APIClient? {
-        // Any user
-        return User(identifier: UUID().uuidString)
-    }
     
     public func process(requestHead: APIRequestHead, requestBody: Data?) -> APIResponder {
-        
-        guard let client = self.personalize(by: requestHead.headers),
-            isAllowed(method: requestHead.method, path: requestHead.uri, client: client) else {
-                return ForbiddenResponder(requestHead: requestHead, requestBody: requestBody)
-        }
+        //orm
+        //rpc
         if let call = requestHead.uri.chopPrefix("/api") {
             if let essence = call.split(separator: "/").first {
                 if let message = APIMessage(rawValue: String(essence)) {
-                    let responder = message.responsableClass.init(requestHead: requestHead, requestBody: requestBody)
-                    self.process(message: responder, from: client)
+                    
+                    let responder = message.responsableClass.init(requestHead: requestHead,
+                                                                  requestBody: requestBody,
+                                                                  authInteraction: self,
+                                                                  personInteraction: self,
+                                                                  modelInteraction: self)
+                    
                     return responder
                 }
             }
         }
-        return NotFoundResponder(requestHead: requestHead, requestBody: requestBody)
+        return ORMResponder(requestHead: requestHead,
+                            requestBody: requestBody,
+                            authInteraction: self,
+                            personInteraction: self,
+                            modelInteraction: self)
     }
 }
