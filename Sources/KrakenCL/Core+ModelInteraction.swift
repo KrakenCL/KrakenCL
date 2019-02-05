@@ -28,7 +28,16 @@ struct RawMLModel : RawModelObjectRepresentable {
 
 extension Core: ModelInteraction {
     func update(model: RawModelObjectRepresentable, for client: APIClient, callback: (Result<RawModelObjectRepresentable>) -> Void) {
+        guard var mlModel = model as? RawMLModel else {
+            callback(.negative(error: URLError(.badServerResponse) ))
+            return
+        }
         
+        if mlModel.identifier.isEmpty {
+             mlModel.identifier = Identifier.new
+            
+            callback(.positive(value: mlModel))
+        }
     }
     
     

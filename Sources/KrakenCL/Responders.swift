@@ -99,7 +99,7 @@ protocol BaseResponder: class, APIResponder {
     var authInteraction: Authorisable { get set }
     var personInteraction: Personalizable { get set }
     var modelInteraction: ModelInteraction { get  set }
-    func process()
+    func process() -> APIResponder
     init(requestHead: APIRequestHead, requestBody: Data?, authInteraction: Authorisable, personInteraction: Personalizable, modelInteraction: ModelInteraction)
     
 }
@@ -122,7 +122,7 @@ class ORMResponder: BaseResponder {
     var responseHead: APIResponseHead
     var responseBody: Data?
     var queue = DispatchQueue(label: "com.krakencl.ResponderProcessQueue", qos: DispatchQoS.default, attributes: DispatchQueue.Attributes.concurrent)
-    var semaphore = DispatchSemaphore(value: 1)
+    var semaphore = DispatchSemaphore(value: 0)
     
     var authInteraction: Authorisable
     var personInteraction: Personalizable
@@ -131,11 +131,11 @@ class ORMResponder: BaseResponder {
     
     
     enum Model: String {
-        case mlModel
+        case mlmodel
         
         var rawModelType: RawModelObjectRepresentable.Type {
             switch self {
-            case .mlModel:
+            case .mlmodel:
                 return RawMLModel.self
             }
         }
@@ -257,11 +257,11 @@ class ORMResponder: BaseResponder {
         semaphore.signal()
     }
     
-    public func process() {
+    public func process() -> APIResponder {
     
         guard let modelType = modelType() else {
             terminate(status: .badRequest)
-            return
+            return self
         }
         
         rawModelType = modelType
@@ -275,5 +275,6 @@ class ORMResponder: BaseResponder {
         if result == .timedOut {
             terminate(error: .timeout)
         }
+        return self
     }
 }

@@ -47,6 +47,7 @@ class Core {
             guard let wSelf = self else { return }
             do {
                 try FileManager.checkAndCreateFolder(wSelf.labsFolderURL)
+                try FileManager.checkAndCreateFolder(wSelf.resourceBundleURL)
                 try FileManager.checkAndCreateFolder(wSelf.configsFolderURL)
                 try wSelf.register(service: HTTPService.self)
                 try wSelf.register(service: ORMService.self)

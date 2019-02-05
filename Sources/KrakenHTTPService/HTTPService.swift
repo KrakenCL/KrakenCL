@@ -28,13 +28,15 @@ public enum HTTPServiceError: Error {
     case resourceBundleNotFound(url: URL)
     //"Address was unable to bind. Please check that the socket was not closed or that the address family was understood."
     case unableToBindAddress
+    case canNotExtractUIInterface
+    case incorrectUIInterfaceElementFormat
 }
 
 public class HTTPService {
-    private static let ResourceBundleName = "Frontend"
+    private static let ResourceBundleName = ""
     internal static let ServerPort = 8080
     private var interactor: HTTPServiceInteractor!
-    private var bundlePath = "/dev/null"
+    internal var bundlePath = "/dev/null"
     private var channel: Channel?
     
     private let httpQueue = DispatchQueue(label: "com.KrakenCL.httpservice")
@@ -103,6 +105,8 @@ extension HTTPService : Serviceable {
         
         guard isFolder.boolValue else { throw HTTPServiceError.resourceBundleNotFound(url: resourceBundlePath) }
         bundlePath = resourceBundlePath.appendingPathComponent(HTTPService.ResourceBundleName).absoluteString
+        
+        try prepareUserInterface()
     }
     
     public func launch() throws {

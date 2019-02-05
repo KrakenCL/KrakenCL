@@ -21,8 +21,6 @@ import KrakenContracts
 extension Core: APIInteractor {
     
     public func process(requestHead: APIRequestHead, requestBody: Data?) -> APIResponder {
-        //orm
-        //rpc
         if let call = requestHead.uri.chopPrefix("/api") {
             if let essence = call.split(separator: "/").first {
                 if let message = APIMessage(rawValue: String(essence)) {
@@ -33,7 +31,7 @@ extension Core: APIInteractor {
                                                                   personInteraction: self,
                                                                   modelInteraction: self)
                     
-                    return responder
+                    return responder.process()
                 }
             }
         }
@@ -41,6 +39,6 @@ extension Core: APIInteractor {
                             requestBody: requestBody,
                             authInteraction: self,
                             personInteraction: self,
-                            modelInteraction: self)
+                            modelInteraction: self).process()
     }
 }

@@ -27,6 +27,15 @@
           "revision": "235aacc514cb81a6881364b0fedcb3dd083228f3",
           "version": "0.3.0"
         }
+      },
+      {
+        "package": "Unarchiver",
+        "repositoryURL": "https://github.com/KrakenCL/Unarchiver.git",
+        "state": {
+          "branch": null,
+          "revision": "7c881c54cd3b784957b566146472de6befca5c59",
+          "version": "0.0.1"
+        }
       }
     ]
   },
