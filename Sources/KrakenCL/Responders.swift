@@ -52,14 +52,18 @@ public struct EmptyValue: Codable {}
 
 public struct ErrorOrValue<V: Codable>: Codable {
     var error: ErrorRepresentation?
-    var value: V?
+    var value: [V]?
     
     init(errorCode code: Int, errorMessage message: String) {
         self.error = ErrorRepresentation(code: code, message: message)
     }
     
     init(value: V) {
-        self.value = value
+        self.value = [value]
+    }
+
+    init(values: [V]) {
+        self.value = values
     }
     
     init(error: ErrorRepresentation) {
@@ -108,6 +112,7 @@ extension BaseResponder {
     public var defaultHeaders: APIHeaders {
         var headers = APIHeaders()
         headers.append(("Content-Length", "\(self.responseBody?.count ?? 0)"))
+        headers.append(("Access-Control-Allow-Origin", "*"))
         return headers
     }
     public func process() {
@@ -168,12 +173,16 @@ class ORMResponder: BaseResponder {
     func action(for client: APIClient) {
         switch requestHead.method {
         case .GET:
+            fetch(identifier: nil, for: client)
+            
             return
             
         case .POST:
             if modelType() == RawMLModel.self {
                 guard let model: RawMLModel = readModelObject() else { return }
                 update(model: model, for: client)
+            } else {
+                terminate(status: .badRequest)
             }
             return
             
@@ -181,6 +190,23 @@ class ORMResponder: BaseResponder {
             return
         }
     }
+    
+    func fetch(identifier: Identifier? = nil, for client: APIClient) {
+        if modelType() == RawMLModel.self {
+            let result: [RawMLModel] = fetch(identifier: nil, for: client)
+            write(models: result)
+            finish()
+        } else {
+            terminate(status: .badRequest)
+        }
+    }
+    
+    func fetch<M: RawModelObjectRepresentable>(identifier: Identifier? = nil, for client: APIClient) -> [M] {
+        
+        
+        return [M]()
+    }
+    
     
     func update<M: RawModelObjectRepresentable>(model: M, for client: APIClient) {
         modelInteraction.update(model: model, for: client) { (result) in
@@ -226,6 +252,15 @@ class ORMResponder: BaseResponder {
             terminate(error: .encodeModel)
         }
     }
+
+    func write<M: RawModelObjectRepresentable>(models: [M]) {
+        do {
+            responseBody = try ErrorOrValue(values: models).serialyze()
+            responseHead.status = .positive
+        } catch {
+            terminate(error: .encodeModel)
+        }
+    }
     
     func finish() {
         semaphore.signal()
@@ -257,6 +292,10 @@ class ORMResponder: BaseResponder {
         semaphore.signal()
     }
     
+    public func processHeaders() {
+        self.responseHead.headers = defaultHeaders
+    }
+    
     public func process() -> APIResponder {
     
         guard let modelType = modelType() else {
@@ -275,6 +314,7 @@ class ORMResponder: BaseResponder {
         if result == .timedOut {
             terminate(error: .timeout)
         }
+        processHeaders()
         return self
     }
 }
