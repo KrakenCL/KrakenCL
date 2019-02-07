@@ -18,11 +18,27 @@ import KrakenContracts
 import KrakenORMService
 
 protocol RawModelObjectRepresentable: Codable { }
-struct RawMLModel : RawModelObjectRepresentable {
+struct RawMLModel: RawModelObjectRepresentable {
     public var identifier: Identifier
-    public var name: String
+    public var label: String
     public var description: String
+}
 
+struct RawSourcePoint: RawModelObjectRepresentable {
+    public var identifier: Identifier
+    public var label: String
+    public var description: String
+}
+
+
+struct RawLanguageEnvironment: RawModelObjectRepresentable {
+    public var identifier: Identifier
+    public var label: String
+    
+    init(_ environment: LanguageEnvironment) {
+        self.label = environment.rawValue
+        self.identifier = environment.rawValue
+    }
 }
 
 
@@ -35,12 +51,7 @@ extension Core: ModelInteraction {
         
         if mlModel.identifier.isEmpty {
              mlModel.identifier = Identifier.new
-            
             callback(.positive(value: mlModel))
         }
     }
-    
-    
-    
-    
 }

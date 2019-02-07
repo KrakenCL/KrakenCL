@@ -135,16 +135,6 @@ class ORMResponder: BaseResponder {
     var rawModelType: RawModelObjectRepresentable.Type!
     
     
-    enum Model: String {
-        case mlmodel
-        
-        var rawModelType: RawModelObjectRepresentable.Type {
-            switch self {
-            case .mlmodel:
-                return RawMLModel.self
-            }
-        }
-    }
 
     
     required init(requestHead: APIRequestHead, requestBody: Data?, authInteraction: Authorisable, personInteraction: Personalizable, modelInteraction: ModelInteraction) {
@@ -190,24 +180,7 @@ class ORMResponder: BaseResponder {
             return
         }
     }
-    
-    func fetch(identifier: Identifier? = nil, for client: APIClient) {
-        if modelType() == RawMLModel.self {
-            let result: [RawMLModel] = fetch(identifier: nil, for: client)
-            write(models: result)
-            finish()
-        } else {
-            terminate(status: .badRequest)
-        }
-    }
-    
-    func fetch<M: RawModelObjectRepresentable>(identifier: Identifier? = nil, for client: APIClient) -> [M] {
-        
-        
-        return [M]()
-    }
-    
-    
+
     func update<M: RawModelObjectRepresentable>(model: M, for client: APIClient) {
         modelInteraction.update(model: model, for: client) { (result) in
             result.onNegative({ (error: Error) in
@@ -263,6 +236,7 @@ class ORMResponder: BaseResponder {
     }
     
     func finish() {
+        processHeaders()
         semaphore.signal()
     }
     
@@ -289,6 +263,7 @@ class ORMResponder: BaseResponder {
             let errorOrValue = ErrorOrValue<EmptyValue>(errorCode: status.rawValue, errorMessage: status.description)
             self.responseBody = try? errorOrValue.serialyze()
         }
+        processHeaders()
         semaphore.signal()
     }
     
@@ -314,7 +289,6 @@ class ORMResponder: BaseResponder {
         if result == .timedOut {
             terminate(error: .timeout)
         }
-        processHeaders()
         return self
     }
 }
